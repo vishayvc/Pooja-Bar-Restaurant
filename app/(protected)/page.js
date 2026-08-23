@@ -8,8 +8,10 @@ function Kpi({ label, value, tone }) {
   const toneClass = tone === "pos" ? "text-bottle" : tone === "neg" ? "text-red" : "text-ink";
   return (
     <div className="kpi">
-      <div className="text-[11px] uppercase tracking-wide text-stone-500 font-semibold">{label}</div>
-      <div className={`font-display font-semibold text-2xl mt-1 ${toneClass}`}>{value}</div>
+      <div className="text-[11px] uppercase tracking-wide text-stone-500 font-semibold truncate">
+        {label}
+      </div>
+      <div className={`kpi-value mt-1 ${toneClass}`}>{value}</div>
     </div>
   );
 }
@@ -99,7 +101,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
         <div className="card">
           <h2 className="font-display font-semibold text-lg mb-3">This month</h2>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-3 gap-2 min-w-0">
             <Kpi label="Sales" value={fmt(month.sale)} />
             <Kpi label="Expenses" value={fmt(month.expense)} />
             <Kpi
@@ -113,7 +115,7 @@ export default function DashboardPage() {
           <h2 className="font-display font-semibold text-lg mb-3">
             Financial year <span className="text-xs font-normal text-stone-500">({fy.label})</span>
           </h2>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-3 gap-2 min-w-0">
             <Kpi label="Sales" value={fmt(fy.sale)} />
             <Kpi label="Expenses" value={fmt(fy.expense)} />
             <Kpi
@@ -131,7 +133,6 @@ export default function DashboardPage() {
             <h2 className="font-display font-semibold text-lg">Low stock alert</h2>
             <span className="text-xs text-stone-500">below 10 units</span>
           </div>
-           <div className="overflow-x-auto">
           <table className="data">
             <thead>
               <tr>
@@ -157,12 +158,11 @@ export default function DashboardPage() {
                 ))
               )}
             </tbody>
-          </table></div>
+          </table>
         </div>
 
         <div className="card">
           <h2 className="font-display font-semibold text-lg mb-2">Dealer payables</h2>
-           <div className="overflow-x-auto">
           <table className="data">
             <thead>
               <tr>
@@ -186,7 +186,7 @@ export default function DashboardPage() {
                 ))
               )}
             </tbody>
-          </table></div>
+          </table>
         </div>
       </div>
     </div>
