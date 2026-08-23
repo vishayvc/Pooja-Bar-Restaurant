@@ -99,7 +99,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
         <div className="card">
           <h2 className="font-display font-semibold text-lg mb-3">This month</h2>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
             <Kpi label="Sales" value={fmt(month.sale)} />
             <Kpi label="Expenses" value={fmt(month.expense)} />
             <Kpi
@@ -113,7 +113,7 @@ export default function DashboardPage() {
           <h2 className="font-display font-semibold text-lg mb-3">
             Financial year <span className="text-xs font-normal text-stone-500">({fy.label})</span>
           </h2>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
             <Kpi label="Sales" value={fmt(fy.sale)} />
             <Kpi label="Expenses" value={fmt(fy.expense)} />
             <Kpi
