@@ -131,6 +131,7 @@ export default function DashboardPage() {
             <h2 className="font-display font-semibold text-lg">Low stock alert</h2>
             <span className="text-xs text-stone-500">below 10 units</span>
           </div>
+           <div className="overflow-x-auto">
           <table className="data">
             <thead>
               <tr>
@@ -156,11 +157,12 @@ export default function DashboardPage() {
                 ))
               )}
             </tbody>
-          </table>
+          </table></div>
         </div>
 
         <div className="card">
           <h2 className="font-display font-semibold text-lg mb-2">Dealer payables</h2>
+           <div className="overflow-x-auto">
           <table className="data">
             <thead>
               <tr>
@@ -184,7 +186,7 @@ export default function DashboardPage() {
                 ))
               )}
             </tbody>
-          </table>
+          </table></div>
         </div>
       </div>
     </div>

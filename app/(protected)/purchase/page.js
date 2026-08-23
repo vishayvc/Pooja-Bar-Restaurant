@@ -179,6 +179,7 @@ export default function PurchasePage() {
 
       <div className="card">
         <h2 className="font-display font-semibold text-lg mb-3">Purchase history</h2>
+         <div className="overflow-x-auto">
         <table className="data">
           <thead>
             <tr>
@@ -210,7 +211,7 @@ export default function PurchasePage() {
               ))
             )}
           </tbody>
-        </table>
+        </table></div>
       </div>
     </div>
   );

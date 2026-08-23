@@ -164,6 +164,7 @@ export default function ExpensesPage() {
 
       <div className="card">
         <h2 className="font-display font-semibold text-lg mb-3">Expense log</h2>
+         <div className="overflow-x-auto">
         <table className="data">
           <thead>
             <tr>
@@ -193,7 +194,7 @@ export default function ExpensesPage() {
               ))
             )}
           </tbody>
-        </table>
+        </table></div>
       </div>
     </div>
   );

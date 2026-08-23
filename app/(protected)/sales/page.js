@@ -198,7 +198,7 @@ export default function SalesPage() {
         </form>
 
         {error && <div className="text-xs text-red mb-3">{error}</div>}
-
+ <div className="overflow-x-auto">
         <table className="data mb-4">
           <thead>
             <tr>
@@ -232,7 +232,7 @@ export default function SalesPage() {
               ))
             )}
           </tbody>
-        </table>
+        </table></div>
 
         <div className="text-[12px] uppercase tracking-wide font-bold text-stone-500 mb-2">
           Collections for the day
@@ -273,6 +273,7 @@ export default function SalesPage() {
       <div className="card">
         <h2 className="font-display font-semibold text-lg mb-3">Opening / closing stock</h2>
         <p className="text-xs text-stone-500 mb-3">For items sold on the selected date.</p>
+         <div className="overflow-x-auto">
         <table className="data">
           <thead>
             <tr>
@@ -304,11 +305,12 @@ export default function SalesPage() {
               })
             )}
           </tbody>
-        </table>
+        </table></div>
       </div>
 
       <div className="card">
         <h2 className="font-display font-semibold text-lg mb-3">Saved sales — recent dates</h2>
+         <div className="overflow-x-auto">
         <table className="data">
           <thead>
             <tr>
@@ -340,7 +342,7 @@ export default function SalesPage() {
               ))
             )}
           </tbody>
-        </table>
+        </table></div>
       </div>
     </div>
   );

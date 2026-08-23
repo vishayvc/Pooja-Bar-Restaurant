@@ -4,13 +4,14 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { fmt } from "@/lib/helpers";
 
-const CATEGORIES = ["Whisky", "Beer", "Snacks", "Cigarette", "Water"];
+const CATEGORIES = ["Whisky", "Beer", "Snacks", "Cigarette", "Water","ColdDrinks"];
 const TAG_CLASS = {
   Whisky: "bg-amber/20 text-amberdark",
   Beer: "bg-yellow-200/60 text-yellow-800",
   Snacks: "bg-stone-200 text-stone-600",
   Cigarette: "bg-red/10 text-red",
   Water: "bg-bottle/10 text-bottle",
+  ColdDrinks: "bg-bottle/10 text-bottle",
 };
 
 export default function InventoryPage() {
@@ -111,6 +112,7 @@ export default function InventoryPage() {
             onChange={(e) => setFilter(e.target.value)}
           />
         </div>
+         <div className="overflow-x-auto">
         <table className="data">
           <thead>
             <tr>
@@ -148,7 +150,7 @@ export default function InventoryPage() {
               ))
             )}
           </tbody>
-        </table>
+        </table></div>
       </div>
     </div>
   );

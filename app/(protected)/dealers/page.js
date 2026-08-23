@@ -65,6 +65,7 @@ export default function DealersPage() {
         <p className="text-xs text-stone-500 mb-3">
           Balance = total purchased on account − total paid via "Dealer Payment" expenses.
         </p>
+         <div className="overflow-x-auto">
         <table className="data">
           <thead>
             <tr>
@@ -100,7 +101,7 @@ export default function DealersPage() {
               ))
             )}
           </tbody>
-        </table>
+        </table></div>
       </div>
     </div>
   );
