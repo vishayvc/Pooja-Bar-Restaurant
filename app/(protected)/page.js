@@ -126,7 +126,7 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="card">
+        <div className="card min-w-0">
           <div className="flex justify-between items-center mb-2">
             <h2 className="font-display font-semibold text-lg">Low stock alert</h2>
             <span className="text-xs text-stone-500">below 10 units</span>
@@ -160,7 +160,7 @@ export default function DashboardPage() {
           </table></div>
         </div>
 
-        <div className="card">
+        <div className="card min-w-0">
           <h2 className="font-display font-semibold text-lg mb-2">Dealer payables</h2>
            <div className="overflow-x-auto">
           <table className="data">

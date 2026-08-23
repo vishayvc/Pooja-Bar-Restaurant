@@ -33,7 +33,7 @@ body {
     @apply border border-line rounded-md px-3 py-2 text-xs font-semibold hover:border-amber hover:text-amberdark transition-colors;
   }
   table.data {
- @apply w-full text-sm border-collapse min-w-[560px];
+ @apply w-full text-sm border-collapse min-w-[420px];
    }
    table.data th {
 @apply text-left text-[11px] uppercase tracking-wide text-stone-500 py-2 px-2 border-b-2 border-line whitespace-nowrap;
