@@ -4,14 +4,14 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { fmt } from "@/lib/helpers";
 
-const CATEGORIES = ["Whisky", "Beer", "Snacks", "Cigarette", "Water","ColdDrinks"];
+const CATEGORIES = ["Whisky", "Beer", "Snacks", "Cigarette", "Water", "Cold Drink"];
 const TAG_CLASS = {
   Whisky: "bg-amber/20 text-amberdark",
   Beer: "bg-yellow-200/60 text-yellow-800",
   Snacks: "bg-stone-200 text-stone-600",
   Cigarette: "bg-red/10 text-red",
   Water: "bg-bottle/10 text-bottle",
-  ColdDrinks: "bg-bottle/10 text-bottle",
+  "Cold Drink": "bg-sky-100 text-sky-700",
 };
 
 export default function InventoryPage() {
@@ -19,6 +19,7 @@ export default function InventoryPage() {
   const [filter, setFilter] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
   const [form, setForm] = useState({ category: "Whisky", name: "", size: "" });
 
   useEffect(() => {
@@ -51,6 +52,20 @@ export default function InventoryPage() {
       return;
     }
     setForm({ ...form, name: "", size: "" });
+    load();
+  }
+
+  async function deleteItem(i) {
+    if (i.stock !== 0) return;
+    if (!confirm(`Delete "${i.name}${i.size ? " " + i.size : ""}" from the catalog?`)) return;
+    setDeletingId(i.id);
+    setError("");
+    const { error } = await supabase.from("inventory_items").delete().eq("id", i.id);
+    setDeletingId(null);
+    if (error) {
+      setError(error.message);
+      return;
+    }
     load();
   }
 
@@ -112,7 +127,7 @@ export default function InventoryPage() {
             onChange={(e) => setFilter(e.target.value)}
           />
         </div>
-         <div className="overflow-x-auto">
+        <div className="overflow-x-auto">
         <table className="data">
           <thead>
             <tr>
@@ -123,12 +138,13 @@ export default function InventoryPage() {
               <th className="text-right">Purchase rate</th>
               <th className="text-right">Selling rate</th>
               <th className="text-right">Stock value</th>
+              <th className="text-right">Action</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={7} className="text-stone-400 italic text-sm py-3">
+                <td colSpan={8} className="text-stone-400 italic text-sm py-3">
                   No matching items.
                 </td>
               </tr>
@@ -146,6 +162,20 @@ export default function InventoryPage() {
                   <td className="text-right font-mono">{fmt(i.purchase_rate)}</td>
                   <td className="text-right font-mono">{fmt(i.selling_rate)}</td>
                   <td className="text-right font-mono">{fmt(i.stock * i.purchase_rate)}</td>
+                  <td className="text-right">
+                    <button
+                      onClick={() => deleteItem(i)}
+                      disabled={i.stock !== 0 || deletingId === i.id}
+                      title={i.stock === 0 ? "Delete item" : "Only items with zero stock can be deleted"}
+                      className={`text-xs font-semibold px-2 py-1 rounded-md border ${
+                        i.stock === 0
+                          ? "border-red/40 text-red hover:bg-red/10"
+                          : "border-line text-stone-300 cursor-not-allowed"
+                      }`}
+                    >
+                      {deletingId === i.id ? "…" : "Delete"}
+                    </button>
+                  </td>
                 </tr>
               ))
             )}

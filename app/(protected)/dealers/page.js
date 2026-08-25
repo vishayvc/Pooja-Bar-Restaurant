@@ -10,6 +10,7 @@ export default function DealersPage() {
   const [phone, setPhone] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [deletingId, setDeletingId] = useState(null);
 
   useEffect(() => {
     load();
@@ -40,6 +41,21 @@ export default function DealersPage() {
     load();
   }
 
+  async function deleteDealer(d) {
+    const clear = d.total_purchased === 0 && d.total_paid === 0 && d.balance_due === 0;
+    if (!clear) return;
+    if (!confirm(`Delete "${d.name}"? This cannot be undone.`)) return;
+    setDeletingId(d.dealer_id);
+    setError("");
+    const { error } = await supabase.from("dealers").delete().eq("id", d.dealer_id);
+    setDeletingId(null);
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    load();
+  }
+
   return (
     <div>
       <div className="card">
@@ -65,7 +81,6 @@ export default function DealersPage() {
         <p className="text-xs text-stone-500 mb-3">
           Balance = total purchased on account − total paid via "Dealer Payment" expenses.
         </p>
-         <div className="overflow-x-auto">
         <table className="data">
           <thead>
             <tr>
@@ -74,34 +89,52 @@ export default function DealersPage() {
               <th className="text-right">Total purchased</th>
               <th className="text-right">Total paid</th>
               <th className="text-right">Balance due</th>
+              <th className="text-right">Action</th>
             </tr>
           </thead>
           <tbody>
             {ledger.length === 0 ? (
               <tr>
-                <td colSpan={5} className="text-stone-400 italic text-sm py-3">
+                <td colSpan={6} className="text-stone-400 italic text-sm py-3">
                   No dealers yet.
                 </td>
               </tr>
             ) : (
-              ledger.map((d) => (
-                <tr key={d.dealer_id}>
-                  <td>{d.name}</td>
-                  <td>{d.phone || "—"}</td>
-                  <td className="text-right font-mono">{fmt(d.total_purchased)}</td>
-                  <td className="text-right font-mono">{fmt(d.total_paid)}</td>
-                  <td
-                    className={`text-right font-mono font-bold ${
-                      d.balance_due > 0 ? "text-red" : "text-bottle"
-                    }`}
-                  >
-                    {fmt(d.balance_due)}
-                  </td>
-                </tr>
-              ))
+              ledger.map((d) => {
+                const clear = d.total_purchased === 0 && d.total_paid === 0 && d.balance_due === 0;
+                return (
+                  <tr key={d.dealer_id}>
+                    <td>{d.name}</td>
+                    <td>{d.phone || "—"}</td>
+                    <td className="text-right font-mono">{fmt(d.total_purchased)}</td>
+                    <td className="text-right font-mono">{fmt(d.total_paid)}</td>
+                    <td
+                      className={`text-right font-mono font-bold ${
+                        d.balance_due > 0 ? "text-red" : "text-bottle"
+                      }`}
+                    >
+                      {fmt(d.balance_due)}
+                    </td>
+                    <td className="text-right">
+                      <button
+                        onClick={() => deleteDealer(d)}
+                        disabled={!clear || deletingId === d.dealer_id}
+                        title={clear ? "Delete dealer" : "Only dealers with zero balance can be deleted"}
+                        className={`text-xs font-semibold px-2 py-1 rounded-md border ${
+                          clear
+                            ? "border-red/40 text-red hover:bg-red/10"
+                            : "border-line text-stone-300 cursor-not-allowed"
+                        }`}
+                      >
+                        {deletingId === d.dealer_id ? "…" : "Delete"}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
-        </table></div>
+        </table>
       </div>
     </div>
   );

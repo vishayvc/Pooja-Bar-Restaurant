@@ -12,6 +12,7 @@ export default function ExpensesPage() {
   const [log, setLog] = useState([]);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
 
   const [form, setForm] = useState({
     date: todayStr(),
@@ -77,6 +78,19 @@ export default function ExpensesPage() {
       return;
     }
     setForm({ ...form, amount: "", note: "" });
+    load();
+  }
+
+  async function deleteExpense(x) {
+    if (!confirm(`Delete this ${x.type} expense of ${fmt(x.amount)} dated ${x.expense_date}?`)) return;
+    setDeletingId(x.id);
+    setError("");
+    const { error } = await supabase.from("expenses").delete().eq("id", x.id);
+    setDeletingId(null);
+    if (error) {
+      setError(error.message);
+      return;
+    }
     load();
   }
 
@@ -164,7 +178,7 @@ export default function ExpensesPage() {
 
       <div className="card">
         <h2 className="font-display font-semibold text-lg mb-3">Expense log</h2>
-         <div className="overflow-x-auto">
+        <div className="overflow-x-auto">
         <table className="data">
           <thead>
             <tr>
@@ -173,12 +187,13 @@ export default function ExpensesPage() {
               <th>Detail</th>
               <th className="text-right">Amount</th>
               <th>Note</th>
+              <th className="text-right">Action</th>
             </tr>
           </thead>
           <tbody>
             {log.length === 0 ? (
               <tr>
-                <td colSpan={5} className="text-stone-400 italic text-sm py-3">
+                <td colSpan={6} className="text-stone-400 italic text-sm py-3">
                   No expenses logged yet.
                 </td>
               </tr>
@@ -190,6 +205,16 @@ export default function ExpensesPage() {
                   <td>{x.employees?.name || x.dealers?.name || "—"}</td>
                   <td className="text-right font-mono">{fmt(x.amount)}</td>
                   <td>{x.note || ""}</td>
+                  <td className="text-right">
+                    <button
+                      onClick={() => deleteExpense(x)}
+                      disabled={deletingId === x.id}
+                      title="Delete expense"
+                      className="text-xs font-semibold px-2 py-1 rounded-md border border-red/40 text-red hover:bg-red/10"
+                    >
+                      {deletingId === x.id ? "…" : "Delete"}
+                    </button>
+                  </td>
                 </tr>
               ))
             )}

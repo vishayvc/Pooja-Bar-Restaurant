@@ -10,6 +10,7 @@ export default function PurchasePage() {
   const [history, setHistory] = useState([]);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
 
   const [form, setForm] = useState({
     date: todayStr(),
@@ -73,6 +74,26 @@ export default function PurchasePage() {
       return;
     }
     setForm((f) => ({ ...f, qty: "" }));
+    load();
+  }
+
+  async function deletePurchase(p) {
+    if (
+      !confirm(
+        `Delete this purchase of ${p.qty} × ${itemLabel(p.inventory_items)} from ${
+          p.dealers?.name || "dealer"
+        } on ${p.purchase_date}? This will reduce that item's stock back down.`
+      )
+    )
+      return;
+    setDeletingId(p.id);
+    setError("");
+    const { error } = await supabase.from("purchases").delete().eq("id", p.id);
+    setDeletingId(null);
+    if (error) {
+      setError(error.message);
+      return;
+    }
     load();
   }
 
@@ -179,7 +200,7 @@ export default function PurchasePage() {
 
       <div className="card">
         <h2 className="font-display font-semibold text-lg mb-3">Purchase history</h2>
-         <div className="overflow-x-auto">
+        <div className="overflow-x-auto">
         <table className="data">
           <thead>
             <tr>
@@ -189,12 +210,13 @@ export default function PurchasePage() {
               <th className="text-right">Qty</th>
               <th className="text-right">Rate</th>
               <th className="text-right">Value</th>
+              <th className="text-right">Action</th>
             </tr>
           </thead>
           <tbody>
             {history.length === 0 ? (
               <tr>
-                <td colSpan={6} className="text-stone-400 italic text-sm py-3">
+                <td colSpan={7} className="text-stone-400 italic text-sm py-3">
                   No purchases logged yet.
                 </td>
               </tr>
@@ -207,6 +229,16 @@ export default function PurchasePage() {
                   <td className="text-right font-mono">{p.qty}</td>
                   <td className="text-right font-mono">{fmt(p.rate)}</td>
                   <td className="text-right font-mono">{fmt(p.value)}</td>
+                  <td className="text-right">
+                    <button
+                      onClick={() => deletePurchase(p)}
+                      disabled={deletingId === p.id}
+                      title="Delete purchase"
+                      className="text-xs font-semibold px-2 py-1 rounded-md border border-red/40 text-red hover:bg-red/10"
+                    >
+                      {deletingId === p.id ? "…" : "Delete"}
+                    </button>
+                  </td>
                 </tr>
               ))
             )}
