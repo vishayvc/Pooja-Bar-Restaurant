@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { fmt, todayStr, itemLabel } from "@/lib/helpers";
+import SearchableSelect from "@/components/SearchableSelect";
 
 export default function SalesPage() {
   const [date, setDate] = useState(todayStr());
@@ -143,6 +144,12 @@ export default function SalesPage() {
     a.click();
   }
 
+  const itemOptions = items.map((i) => ({
+    value: i.id,
+    label: `${itemLabel(i)} — ${i.stock} in stock`,
+    searchText: `${i.name} ${i.size || ""} ${i.category}`,
+  }));
+
   const lineTotal = lines.reduce((s, l) => s + Number(l.value), 0);
   const collectionsTotal = (Number(cash) || 0) + (Number(upi) || 0);
   const diff = collectionsTotal - lineTotal;
@@ -167,15 +174,15 @@ export default function SalesPage() {
         </p>
 
         <form onSubmit={addLine} className="flex flex-wrap gap-3 items-end mb-4">
-          <div className="flex-1 min-w-[200px]">
+          <div className="flex-1 min-w-[220px]">
             <label className="field-label">Item (brand · size)</label>
-            <select className="input" value={lineItemId} onChange={(e) => setLineItemId(e.target.value)}>
-              {items.map((i) => (
-                <option key={i.id} value={i.id}>
-                  {itemLabel(i)} — {i.stock} in stock
-                </option>
-              ))}
-            </select>
+            <SearchableSelect
+              options={itemOptions}
+              value={lineItemId}
+              onChange={setLineItemId}
+              placeholder="Type to search item…"
+              required
+            />
           </div>
           <div className="min-w-[100px]">
             <label className="field-label">Qty sold</label>
@@ -198,41 +205,43 @@ export default function SalesPage() {
         </form>
 
         {error && <div className="text-xs text-red mb-3">{error}</div>}
- <div className="overflow-x-auto">
-        <table className="data mb-4">
-          <thead>
-            <tr>
-              <th>Item</th>
-              <th className="text-right">Qty</th>
-              <th className="text-right">Rate</th>
-              <th className="text-right">Value</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {lines.length === 0 ? (
+
+        <div className="overflow-x-auto">
+          <table className="data mb-4">
+            <thead>
               <tr>
-                <td colSpan={5} className="text-stone-400 italic text-sm py-3">
-                  No lines added for this date yet.
-                </td>
+                <th>Item</th>
+                <th className="text-right">Qty</th>
+                <th className="text-right">Rate</th>
+                <th className="text-right">Value</th>
+                <th></th>
               </tr>
-            ) : (
-              lines.map((l) => (
-                <tr key={l.id}>
-                  <td>{itemLabel(l.inventory_items)}</td>
-                  <td className="text-right font-mono">{l.qty}</td>
-                  <td className="text-right font-mono">{fmt(l.rate)}</td>
-                  <td className="text-right font-mono">{fmt(l.value)}</td>
-                  <td>
-                    <button className="btn-ghost" onClick={() => removeLine(l.id)}>
-                      Remove
-                    </button>
+            </thead>
+            <tbody>
+              {lines.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="text-stone-400 italic text-sm py-3">
+                    No lines added for this date yet.
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table></div>
+              ) : (
+                lines.map((l) => (
+                  <tr key={l.id}>
+                    <td>{itemLabel(l.inventory_items)}</td>
+                    <td className="text-right font-mono">{l.qty}</td>
+                    <td className="text-right font-mono">{fmt(l.rate)}</td>
+                    <td className="text-right font-mono">{fmt(l.value)}</td>
+                    <td>
+                      <button className="btn-ghost" onClick={() => removeLine(l.id)}>
+                        Remove
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
 
         <div className="text-[12px] uppercase tracking-wide font-bold text-stone-500 mb-2">
           Collections for the day
@@ -273,76 +282,78 @@ export default function SalesPage() {
       <div className="card">
         <h2 className="font-display font-semibold text-lg mb-3">Opening / closing stock</h2>
         <p className="text-xs text-stone-500 mb-3">For items sold on the selected date.</p>
-         <div className="overflow-x-auto">
-        <table className="data">
-          <thead>
-            <tr>
-              <th>Item</th>
-              <th className="text-right">Opening</th>
-              <th className="text-right">Sold</th>
-              <th className="text-right">Closing</th>
-            </tr>
-          </thead>
-          <tbody>
-            {lines.length === 0 ? (
+        <div className="overflow-x-auto">
+          <table className="data">
+            <thead>
               <tr>
-                <td colSpan={4} className="text-stone-400 italic text-sm py-3">
-                  Add sale lines to see stock movement.
-                </td>
+                <th>Item</th>
+                <th className="text-right">Opening</th>
+                <th className="text-right">Sold</th>
+                <th className="text-right">Closing</th>
               </tr>
-            ) : (
-              lines.map((l) => {
-                const closing = l.inventory_items?.stock ?? 0;
-                const opening = closing + l.qty;
-                return (
-                  <tr key={l.id}>
-                    <td>{itemLabel(l.inventory_items)}</td>
-                    <td className="text-right font-mono">{opening}</td>
-                    <td className="text-right font-mono">{l.qty}</td>
-                    <td className="text-right font-mono">{closing}</td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table></div>
+            </thead>
+            <tbody>
+              {lines.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="text-stone-400 italic text-sm py-3">
+                    Add sale lines to see stock movement.
+                  </td>
+                </tr>
+              ) : (
+                lines.map((l) => {
+                  const closing = l.inventory_items?.stock ?? 0;
+                  const opening = closing + l.qty;
+                  return (
+                    <tr key={l.id}>
+                      <td>{itemLabel(l.inventory_items)}</td>
+                      <td className="text-right font-mono">{opening}</td>
+                      <td className="text-right font-mono">{l.qty}</td>
+                      <td className="text-right font-mono">{closing}</td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div className="card">
         <h2 className="font-display font-semibold text-lg mb-3">Saved sales — recent dates</h2>
-         <div className="overflow-x-auto">
-        <table className="data">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th className="text-right">Sale value</th>
-              <th className="text-right">Cash</th>
-              <th className="text-right">UPI</th>
-              <th className="text-right">Diff</th>
-            </tr>
-          </thead>
-          <tbody>
-            {history.length === 0 ? (
+        <div className="overflow-x-auto">
+          <table className="data">
+            <thead>
               <tr>
-                <td colSpan={5} className="text-stone-400 italic text-sm py-3">
-                  No sales saved yet.
-                </td>
+                <th>Date</th>
+                <th className="text-right">Sale value</th>
+                <th className="text-right">Cash</th>
+                <th className="text-right">UPI</th>
+                <th className="text-right">Diff</th>
               </tr>
-            ) : (
-              history.map((h) => (
-                <tr key={h.id}>
-                  <td>{h.sale_date}</td>
-                  <td className="text-right font-mono">{fmt(h.sale_value)}</td>
-                  <td className="text-right font-mono">{fmt(h.cash)}</td>
-                  <td className="text-right font-mono">{fmt(h.upi)}</td>
-                  <td className={`text-right font-mono ${Math.abs(h.diff) < 0.01 ? "text-bottle" : "text-red"}`}>
-                    {fmt(h.diff)}
+            </thead>
+            <tbody>
+              {history.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="text-stone-400 italic text-sm py-3">
+                    No sales saved yet.
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table></div>
+              ) : (
+                history.map((h) => (
+                  <tr key={h.id}>
+                    <td>{h.sale_date}</td>
+                    <td className="text-right font-mono">{fmt(h.sale_value)}</td>
+                    <td className="text-right font-mono">{fmt(h.cash)}</td>
+                    <td className="text-right font-mono">{fmt(h.upi)}</td>
+                    <td className={`text-right font-mono ${Math.abs(h.diff) < 0.01 ? "text-bottle" : "text-red"}`}>
+                      {fmt(h.diff)}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
