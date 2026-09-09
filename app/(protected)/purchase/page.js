@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { fmt, todayStr, itemLabel } from "@/lib/helpers";
+import SearchableSelect from "@/components/SearchableSelect";
 
 export default function PurchasePage() {
   const [dealers, setDealers] = useState([]);
@@ -54,6 +55,12 @@ export default function PurchasePage() {
       sellRate: item ? item.selling_rate : f.sellRate,
     }));
   }
+
+  const itemOptions = items.map((i) => ({
+    value: i.id,
+    label: itemLabel(i),
+    searchText: `${i.name} ${i.size || ""} ${i.category}`,
+  }));
 
   async function submit(e) {
     e.preventDefault();
@@ -134,20 +141,15 @@ export default function PurchasePage() {
                 ))}
               </select>
             </div>
-            <div className="flex-1 min-w-[200px]">
+            <div className="flex-1 min-w-[220px]">
               <label className="field-label">Item (brand · size)</label>
-              <select
-                className="input"
+              <SearchableSelect
+                options={itemOptions}
                 value={form.itemId}
-                onChange={(e) => onItemChange(e.target.value)}
+                onChange={onItemChange}
+                placeholder="Type to search item…"
                 required
-              >
-                {items.map((i) => (
-                  <option key={i.id} value={i.id}>
-                    {itemLabel(i)}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
           </div>
           <div className="flex flex-wrap gap-3 mb-3">
