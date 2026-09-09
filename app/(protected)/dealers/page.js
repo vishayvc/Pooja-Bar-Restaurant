@@ -8,9 +8,13 @@ export default function DealersPage() {
   const [ledger, setLedger] = useState([]);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [openingBalance, setOpeningBalance] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [deletingId, setDeletingId] = useState(null);
+  const [editingId, setEditingId] = useState(null);
+  const [editValue, setEditValue] = useState("");
+  const [updatingId, setUpdatingId] = useState(null);
 
   useEffect(() => {
     load();
@@ -30,7 +34,11 @@ export default function DealersPage() {
     if (!name.trim()) return;
     setSaving(true);
     setError("");
-    const { error } = await supabase.from("dealers").insert({ name: name.trim(), phone: phone.trim() || null });
+    const { error } = await supabase.from("dealers").insert({
+      name: name.trim(),
+      phone: phone.trim() || null,
+      opening_balance: openingBalance.trim() ? Number(openingBalance) : 0,
+    });
     setSaving(false);
     if (error) {
       setError(error.message);
@@ -38,11 +46,49 @@ export default function DealersPage() {
     }
     setName("");
     setPhone("");
+    setOpeningBalance("");
+    load();
+  }
+
+  function startEdit(d) {
+    setEditingId(d.dealer_id);
+    setEditValue(String(d.opening_balance ?? 0));
+    setError("");
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditValue("");
+  }
+
+  async function saveEdit(d) {
+    const value = editValue.trim() === "" ? 0 : Number(editValue);
+    if (Number.isNaN(value) || value < 0) {
+      setError("Opening balance must be a valid number ≥ 0.");
+      return;
+    }
+    setUpdatingId(d.dealer_id);
+    setError("");
+    const { error } = await supabase
+      .from("dealers")
+      .update({ opening_balance: value })
+      .eq("id", d.dealer_id);
+    setUpdatingId(null);
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    setEditingId(null);
+    setEditValue("");
     load();
   }
 
   async function deleteDealer(d) {
-    const clear = d.total_purchased === 0 && d.total_paid === 0 && d.balance_due === 0;
+    const clear =
+      (d.opening_balance || 0) === 0 &&
+      d.total_purchased === 0 &&
+      d.total_paid === 0 &&
+      d.balance_due === 0;
     if (!clear) return;
     if (!confirm(`Delete "${d.name}"? This cannot be undone.`)) return;
     setDeletingId(d.dealer_id);
@@ -69,6 +115,18 @@ export default function DealersPage() {
             <label className="field-label">Phone (optional)</label>
             <input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} />
           </div>
+          <div className="min-w-[160px]">
+            <label className="field-label">Opening balance (optional)</label>
+            <input
+              className="input"
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="0"
+              value={openingBalance}
+              onChange={(e) => setOpeningBalance(e.target.value)}
+            />
+          </div>
           <button className="btn-primary" disabled={saving}>
             {saving ? "Adding…" : "Add dealer"}
           </button>
@@ -86,6 +144,7 @@ export default function DealersPage() {
             <tr>
               <th>Dealer</th>
               <th>Phone</th>
+              <th className="text-right">Opening balance</th>
               <th className="text-right">Total purchased</th>
               <th className="text-right">Total paid</th>
               <th className="text-right">Balance due</th>
@@ -95,17 +154,64 @@ export default function DealersPage() {
           <tbody>
             {ledger.length === 0 ? (
               <tr>
-                <td colSpan={6} className="text-stone-400 italic text-sm py-3">
+                <td colSpan={7} className="text-stone-400 italic text-sm py-3">
                   No dealers yet.
                 </td>
               </tr>
             ) : (
               ledger.map((d) => {
-                const clear = d.total_purchased === 0 && d.total_paid === 0 && d.balance_due === 0;
+                const clear =
+                  (d.opening_balance || 0) === 0 &&
+                  d.total_purchased === 0 &&
+                  d.total_paid === 0 &&
+                  d.balance_due === 0;
                 return (
                   <tr key={d.dealer_id}>
                     <td>{d.name}</td>
                     <td>{d.phone || "—"}</td>
+                    <td className="text-right font-mono">
+                      {editingId === d.dealer_id ? (
+                        <div className="flex items-center gap-1 justify-end">
+                          <input
+                            autoFocus
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            className="input w-24 text-right py-1"
+                            value={editValue}
+                            onChange={(e) => setEditValue(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") saveEdit(d);
+                              if (e.key === "Escape") cancelEdit();
+                            }}
+                          />
+                          <button
+                            onClick={() => saveEdit(d)}
+                            disabled={updatingId === d.dealer_id}
+                            title="Save"
+                            className="text-xs font-semibold px-2 py-1 rounded-md border border-bottle/40 text-bottle hover:bg-bottle/10"
+                          >
+                            {updatingId === d.dealer_id ? "…" : "Save"}
+                          </button>
+                          <button
+                            onClick={cancelEdit}
+                            disabled={updatingId === d.dealer_id}
+                            title="Cancel"
+                            className="text-xs font-semibold px-2 py-1 rounded-md border border-line text-stone-500 hover:bg-stone-100"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => startEdit(d)}
+                          title="Click to edit opening balance"
+                          className="hover:underline decoration-dotted underline-offset-4"
+                        >
+                          {fmt(d.opening_balance || 0)}
+                        </button>
+                      )}
+                    </td>
                     <td className="text-right font-mono">{fmt(d.total_purchased)}</td>
                     <td className="text-right font-mono">{fmt(d.total_paid)}</td>
                     <td
