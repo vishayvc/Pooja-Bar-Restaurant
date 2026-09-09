@@ -97,7 +97,7 @@ export default function SearchableSelect({ options, value, onChange, placeholder
                   idx === highlight ? "bg-amber/20" : ""
                 } ${o.value === value ? "font-semibold" : ""}`}
               >
-                {o.label}
+                {o.label} 
               </div>
             ))
           )}
