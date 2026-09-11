@@ -37,6 +37,12 @@ async function expensesInRange(start, end) {
   return data.reduce((s, x) => s + Number(x.amount), 0);
 }
 
+async function totalStockValue() {
+  const { data, error } = await supabase.from("inventory_items").select("stock, purchase_rate");
+  if (error || !data) return 0;
+  return data.reduce((s, i) => s + Number(i.stock) * Number(i.purchase_rate), 0);
+}
+
 export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [today, setToday] = useState({ sale: 0, expense: 0 });
@@ -44,9 +50,15 @@ export default function DashboardPage() {
   const [fy, setFy] = useState({ sale: 0, expense: 0, label: "" });
   const [lowStock, setLowStock] = useState([]);
   const [payables, setPayables] = useState([]);
+  const [stockValue, setStockValue] = useState(0);
+  const [salaryDues, setSalaryDues] = useState([]);
 
   useEffect(() => {
     load();
+  }, []);
+
+  useEffect(() => {
+    totalStockValue().then(setStockValue);
   }, []);
 
   async function load() {
@@ -79,6 +91,13 @@ export default function DashboardPage() {
       .order("balance_due", { ascending: false });
     setPayables(ledger || []);
 
+    const { data: dues } = await supabase
+      .from("employee_ledger")
+      .select("*")
+      .neq("outstanding", 0)
+      .order("outstanding", { ascending: false });
+    setSalaryDues(dues || []);
+
     setLoading(false);
   }
 
@@ -99,7 +118,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
         <div className="card">
           <h2 className="font-display font-semibold text-lg mb-3">This month</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
+          <div className="grid grid-cols-3 gap-2">
             <Kpi label="Sales" value={fmt(month.sale)} />
             <Kpi label="Expenses" value={fmt(month.expense)} />
             <Kpi
@@ -113,7 +132,7 @@ export default function DashboardPage() {
           <h2 className="font-display font-semibold text-lg mb-3">
             Financial year <span className="text-xs font-normal text-stone-500">({fy.label})</span>
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
+          <div className="grid grid-cols-3 gap-2">
             <Kpi label="Sales" value={fmt(fy.sale)} />
             <Kpi label="Expenses" value={fmt(fy.expense)} />
             <Kpi
@@ -125,13 +144,16 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
+        <Kpi label="Inventory stock value" value={fmt(stockValue)} />
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="card min-w-0">
+        <div className="card">
           <div className="flex justify-between items-center mb-2">
             <h2 className="font-display font-semibold text-lg">Low stock alert</h2>
             <span className="text-xs text-stone-500">below 10 units</span>
           </div>
-           <div className="overflow-x-auto">
           <table className="data">
             <thead>
               <tr>
@@ -157,12 +179,11 @@ export default function DashboardPage() {
                 ))
               )}
             </tbody>
-          </table></div>
+          </table>
         </div>
 
-        <div className="card min-w-0">
+        <div className="card">
           <h2 className="font-display font-semibold text-lg mb-2">Dealer payables</h2>
-           <div className="overflow-x-auto">
           <table className="data">
             <thead>
               <tr>
@@ -186,7 +207,55 @@ export default function DashboardPage() {
                 ))
               )}
             </tbody>
-          </table></div>
+          </table>
+        </div>
+
+        <div className="card">
+          <div className="flex justify-between items-center mb-2">
+            <h2 className="font-display font-semibold text-lg">Salary due</h2>
+            <span className="text-xs text-stone-500">this month</span>
+          </div>
+          <table className="data">
+            <thead>
+              <tr>
+                <th>Employee</th>
+                <th className="text-right">Status</th>
+                <th className="text-right">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {salaryDues.length === 0 ? (
+                <tr>
+                  <td colSpan={3} className="text-stone-400 italic text-sm py-3">
+                    All salaries settled for this month.
+                  </td>
+                </tr>
+              ) : (
+                salaryDues.map((e) => {
+                  const overpaid = e.outstanding < 0;
+                  return (
+                    <tr key={e.employee_id}>
+                      <td>{e.name}</td>
+                      <td className="text-right text-xs">
+                        {overpaid ? (
+                          <span className="tag bg-bottle/10 text-bottle">Advance</span>
+                        ) : (
+                          <span className="tag bg-red/10 text-red">Due</span>
+                        )}
+                      </td>
+                      <td
+                        className={`text-right font-mono font-semibold ${
+                          overpaid ? "text-bottle" : "text-red"
+                        }`}
+                      >
+                        {fmt(Math.abs(e.outstanding))}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
