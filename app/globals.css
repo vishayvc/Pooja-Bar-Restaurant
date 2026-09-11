@@ -1,0 +1,47 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background: theme('colors.paper');
+  color: theme('colors.ink');
+}
+
+@layer components {
+  .card {
+    @apply bg-white border border-line rounded-lg p-5 mb-4;
+  }
+  .kpi {
+    @apply bg-white border border-line rounded-lg p-4 relative overflow-hidden;
+  }
+  .kpi::before {
+    content: "";
+    @apply absolute top-0 left-0 w-1 h-full bg-amber;
+  }
+  .field-label {
+    @apply text-[11px] font-semibold uppercase tracking-wide text-stone-500 mb-1 block;
+  }
+  .input {
+    @apply w-full px-3 py-2 border border-line rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber;
+  }
+  .btn-primary {
+    @apply bg-bottle text-white rounded-md px-4 py-2 text-sm font-semibold hover:bg-bottlelight transition-colors;
+  }
+  .btn-ghost {
+    @apply border border-line rounded-md px-3 py-2 text-xs font-semibold hover:border-amber hover:text-amberdark transition-colors;
+  }
+  table.data {
+ @apply w-full text-sm border-collapse min-w-[420px];
+   }
+   table.data th {
+@apply text-left text-[11px] uppercase tracking-wide text-stone-500 py-2 px-2 border-b-2 border-line whitespace-nowrap;
+   }
+   table.data td {
+ @apply py-2 px-2 border-b border-line whitespace-nowrap;
+   }
+  .tag {
+    @apply inline-block px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide;
+  }
+}
