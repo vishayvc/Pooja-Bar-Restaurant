@@ -11,6 +11,7 @@ const TABS = [
   { href: "/inventory", label: "Inventory" },
   { href: "/sales", label: "Sales" },
   { href: "/expenses", label: "Expenses" },
+  { href: "/employees", label: "Employees" },
 ];
 
 export default function Nav() {
