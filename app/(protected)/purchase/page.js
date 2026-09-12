@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { fmt, todayStr, itemLabel } from "@/lib/helpers";
-import SearchableSelect from "@/components/SearchableSelect";
 
 export default function PurchasePage() {
   const [dealers, setDealers] = useState([]);
@@ -17,6 +16,7 @@ export default function PurchasePage() {
     date: todayStr(),
     dealerId: "",
     itemId: "",
+    billNo: "",
     qty: "",
     rate: "",
     sellRate: "",
@@ -56,12 +56,6 @@ export default function PurchasePage() {
     }));
   }
 
-  const itemOptions = items.map((i) => ({
-    value: i.id,
-    label: itemLabel(i),
-    searchText: `${i.name} ${i.size || ""} ${i.category}`,
-  }));
-
   async function submit(e) {
     e.preventDefault();
     setError("");
@@ -71,6 +65,7 @@ export default function PurchasePage() {
       purchase_date: form.date,
       dealer_id: form.dealerId,
       item_id: form.itemId,
+      bill_no: form.billNo.trim() || null,
       qty: Number(form.qty),
       rate: Number(form.rate),
       selling_rate: Number(form.sellRate),
@@ -80,7 +75,7 @@ export default function PurchasePage() {
       setError(error.message);
       return;
     }
-    setForm((f) => ({ ...f, qty: "" }));
+    setForm((f) => ({ ...f, qty: "", billNo: "" }));
     load();
   }
 
@@ -141,14 +136,28 @@ export default function PurchasePage() {
                 ))}
               </select>
             </div>
-            <div className="flex-1 min-w-[220px]">
+            <div className="flex-1 min-w-[200px]">
               <label className="field-label">Item (brand · size)</label>
-              <SearchableSelect
-                options={itemOptions}
+              <select
+                className="input"
                 value={form.itemId}
-                onChange={onItemChange}
-                placeholder="Type to search item…"
+                onChange={(e) => onItemChange(e.target.value)}
                 required
+              >
+                {items.map((i) => (
+                  <option key={i.id} value={i.id}>
+                    {itemLabel(i)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex-1 min-w-[140px]">
+              <label className="field-label">Bill no. (optional)</label>
+              <input
+                className="input"
+                placeholder="e.g. INV-1042"
+                value={form.billNo}
+                onChange={(e) => setForm({ ...form, billNo: e.target.value })}
               />
             </div>
           </div>
@@ -207,6 +216,7 @@ export default function PurchasePage() {
           <thead>
             <tr>
               <th>Date</th>
+              <th>Bill no.</th>
               <th>Dealer</th>
               <th>Item</th>
               <th className="text-right">Qty</th>
@@ -218,7 +228,7 @@ export default function PurchasePage() {
           <tbody>
             {history.length === 0 ? (
               <tr>
-                <td colSpan={7} className="text-stone-400 italic text-sm py-3">
+                <td colSpan={8} className="text-stone-400 italic text-sm py-3">
                   No purchases logged yet.
                 </td>
               </tr>
@@ -226,6 +236,7 @@ export default function PurchasePage() {
               history.map((p) => (
                 <tr key={p.id}>
                   <td>{p.purchase_date}</td>
+                  <td>{p.bill_no || "—"}</td>
                   <td>{p.dealers?.name || "—"}</td>
                   <td>{itemLabel(p.inventory_items)}</td>
                   <td className="text-right font-mono">{p.qty}</td>
