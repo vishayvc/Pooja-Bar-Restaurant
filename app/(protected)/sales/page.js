@@ -3,13 +3,12 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { fmt, todayStr, itemLabel } from "@/lib/helpers";
-import SearchableSelect from "@/components/SearchableSelect";
 
 export default function SalesPage() {
   const [date, setDate] = useState(todayStr());
   const [items, setItems] = useState([]);
-  const [saleDay, setSaleDay] = useState(null); // row from sale_days, or null if none yet
-  const [lines, setLines] = useState([]); // sale_lines joined with inventory_items
+  const [saleDay, setSaleDay] = useState(null);
+  const [lines, setLines] = useState([]);
   const [history, setHistory] = useState([]);
 
   const [lineItemId, setLineItemId] = useState("");
@@ -19,6 +18,7 @@ export default function SalesPage() {
   const [error, setError] = useState("");
   const [savingLine, setSavingLine] = useState(false);
   const [savingCollections, setSavingCollections] = useState(false);
+  const [deletingDayId, setDeletingDayId] = useState(null);
 
   useEffect(() => {
     loadItems();
@@ -110,6 +110,26 @@ export default function SalesPage() {
     await Promise.all([loadDay(date), loadItems(), loadHistory()]);
   }
 
+  // Cash and UPI auto-complete each other against the running line total —
+  // type one, the other fills in with whatever's left to reconcile.
+  function currentLineTotal() {
+    return lines.reduce((s, l) => s + Number(l.value), 0);
+  }
+
+  function handleCashChange(v) {
+    setCash(v);
+    const total = currentLineTotal();
+    const rem = total - (Number(v) || 0);
+    setUpi(rem > 0 ? String(Math.round(rem * 100) / 100) : "0");
+  }
+
+  function handleUpiChange(v) {
+    setUpi(v);
+    const total = currentLineTotal();
+    const rem = total - (Number(v) || 0);
+    setCash(rem > 0 ? String(Math.round(rem * 100) / 100) : "0");
+  }
+
   async function saveCollections() {
     setSavingCollections(true);
     setError("");
@@ -125,6 +145,26 @@ export default function SalesPage() {
       setError(err.message);
     }
     setSavingCollections(false);
+  }
+
+  async function deleteSaleDay(h) {
+    if (
+      !confirm(
+        `Delete the entire saved sale for ${h.sale_date} (${fmt(
+          h.sale_value
+        )})? This removes all its line items and restores their stock. This cannot be undone.`
+      )
+    )
+      return;
+    setDeletingDayId(h.id);
+    setError("");
+    const { error } = await supabase.from("sale_days").delete().eq("id", h.id);
+    setDeletingDayId(null);
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    await Promise.all([loadDay(date), loadItems(), loadHistory()]);
   }
 
   function downloadCsv() {
@@ -144,13 +184,7 @@ export default function SalesPage() {
     a.click();
   }
 
-  const itemOptions = items.map((i) => ({
-    value: i.id,
-    label: `${itemLabel(i)} — ${i.stock} in stock`,
-    searchText: `${i.name} ${i.size || ""} ${i.category}`,
-  }));
-
-  const lineTotal = lines.reduce((s, l) => s + Number(l.value), 0);
+  const lineTotal = currentLineTotal();
   const collectionsTotal = (Number(cash) || 0) + (Number(upi) || 0);
   const diff = collectionsTotal - lineTotal;
   const reconciled = Math.abs(diff) < 0.01;
@@ -174,15 +208,15 @@ export default function SalesPage() {
         </p>
 
         <form onSubmit={addLine} className="flex flex-wrap gap-3 items-end mb-4">
-          <div className="flex-1 min-w-[220px]">
+          <div className="flex-1 min-w-[200px]">
             <label className="field-label">Item (brand · size)</label>
-            <SearchableSelect
-              options={itemOptions}
-              value={lineItemId}
-              onChange={setLineItemId}
-              placeholder="Type to search item…"
-              required
-            />
+            <select className="input" value={lineItemId} onChange={(e) => setLineItemId(e.target.value)}>
+              {items.map((i) => (
+                <option key={i.id} value={i.id}>
+                  {itemLabel(i)} — {i.stock} in stock
+                </option>
+              ))}
+            </select>
           </div>
           <div className="min-w-[100px]">
             <label className="field-label">Qty sold</label>
@@ -205,55 +239,71 @@ export default function SalesPage() {
         </form>
 
         {error && <div className="text-xs text-red mb-3">{error}</div>}
-
         <div className="overflow-x-auto">
-          <table className="data mb-4">
-            <thead>
+        <table className="data mb-4">
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th className="text-right">Qty</th>
+              <th className="text-right">Rate</th>
+              <th className="text-right">Value</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {lines.length === 0 ? (
               <tr>
-                <th>Item</th>
-                <th className="text-right">Qty</th>
-                <th className="text-right">Rate</th>
-                <th className="text-right">Value</th>
-                <th></th>
+                <td colSpan={5} className="text-stone-400 italic text-sm py-3">
+                  No lines added for this date yet.
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {lines.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="text-stone-400 italic text-sm py-3">
-                    No lines added for this date yet.
+            ) : (
+              lines.map((l) => (
+                <tr key={l.id}>
+                  <td>{itemLabel(l.inventory_items)}</td>
+                  <td className="text-right font-mono">{l.qty}</td>
+                  <td className="text-right font-mono">{fmt(l.rate)}</td>
+                  <td className="text-right font-mono">{fmt(l.value)}</td>
+                  <td>
+                    <button className="btn-ghost" onClick={() => removeLine(l.id)}>
+                      Remove
+                    </button>
                   </td>
                 </tr>
-              ) : (
-                lines.map((l) => (
-                  <tr key={l.id}>
-                    <td>{itemLabel(l.inventory_items)}</td>
-                    <td className="text-right font-mono">{l.qty}</td>
-                    <td className="text-right font-mono">{fmt(l.rate)}</td>
-                    <td className="text-right font-mono">{fmt(l.value)}</td>
-                    <td>
-                      <button className="btn-ghost" onClick={() => removeLine(l.id)}>
-                        Remove
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+              ))
+            )}
+          </tbody>
+        </table></div>
 
         <div className="text-[12px] uppercase tracking-wide font-bold text-stone-500 mb-2">
           Collections for the day
         </div>
+        <p className="text-xs text-stone-500 mb-2">
+          Enter one of Cash or UPI — the other fills in automatically with whatever's left of the
+          line total. You can still overwrite either afterward.
+        </p>
         <div className="flex flex-wrap gap-3 items-end mb-2">
           <div className="min-w-[140px]">
             <label className="field-label">Cash (₹)</label>
-            <input type="number" min="0" step="0.01" className="input" value={cash} onChange={(e) => setCash(e.target.value)} />
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              className="input"
+              value={cash}
+              onChange={(e) => handleCashChange(e.target.value)}
+            />
           </div>
           <div className="min-w-[140px]">
             <label className="field-label">UPI (₹)</label>
-            <input type="number" min="0" step="0.01" className="input" value={upi} onChange={(e) => setUpi(e.target.value)} />
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              className="input"
+              value={upi}
+              onChange={(e) => handleUpiChange(e.target.value)}
+            />
           </div>
         </div>
 
@@ -283,77 +333,86 @@ export default function SalesPage() {
         <h2 className="font-display font-semibold text-lg mb-3">Opening / closing stock</h2>
         <p className="text-xs text-stone-500 mb-3">For items sold on the selected date.</p>
         <div className="overflow-x-auto">
-          <table className="data">
-            <thead>
+        <table className="data">
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th className="text-right">Opening</th>
+              <th className="text-right">Sold</th>
+              <th className="text-right">Closing</th>
+            </tr>
+          </thead>
+          <tbody>
+            {lines.length === 0 ? (
               <tr>
-                <th>Item</th>
-                <th className="text-right">Opening</th>
-                <th className="text-right">Sold</th>
-                <th className="text-right">Closing</th>
+                <td colSpan={4} className="text-stone-400 italic text-sm py-3">
+                  Add sale lines to see stock movement.
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {lines.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="text-stone-400 italic text-sm py-3">
-                    Add sale lines to see stock movement.
-                  </td>
-                </tr>
-              ) : (
-                lines.map((l) => {
-                  const closing = l.inventory_items?.stock ?? 0;
-                  const opening = closing + l.qty;
-                  return (
-                    <tr key={l.id}>
-                      <td>{itemLabel(l.inventory_items)}</td>
-                      <td className="text-right font-mono">{opening}</td>
-                      <td className="text-right font-mono">{l.qty}</td>
-                      <td className="text-right font-mono">{closing}</td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+            ) : (
+              lines.map((l) => {
+                const closing = l.inventory_items?.stock ?? 0;
+                const opening = closing + l.qty;
+                return (
+                  <tr key={l.id}>
+                    <td>{itemLabel(l.inventory_items)}</td>
+                    <td className="text-right font-mono">{opening}</td>
+                    <td className="text-right font-mono">{l.qty}</td>
+                    <td className="text-right font-mono">{closing}</td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table></div>
       </div>
 
       <div className="card">
         <h2 className="font-display font-semibold text-lg mb-3">Saved sales — recent dates</h2>
         <div className="overflow-x-auto">
-          <table className="data">
-            <thead>
+        <table className="data">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th className="text-right">Sale value</th>
+              <th className="text-right">Cash</th>
+              <th className="text-right">UPI</th>
+              <th className="text-right">Diff</th>
+              <th className="text-right">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {history.length === 0 ? (
               <tr>
-                <th>Date</th>
-                <th className="text-right">Sale value</th>
-                <th className="text-right">Cash</th>
-                <th className="text-right">UPI</th>
-                <th className="text-right">Diff</th>
+                <td colSpan={6} className="text-stone-400 italic text-sm py-3">
+                  No sales saved yet.
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {history.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="text-stone-400 italic text-sm py-3">
-                    No sales saved yet.
+            ) : (
+              history.map((h) => (
+                <tr key={h.id}>
+                  <td>{h.sale_date}</td>
+                  <td className="text-right font-mono">{fmt(h.sale_value)}</td>
+                  <td className="text-right font-mono">{fmt(h.cash)}</td>
+                  <td className="text-right font-mono">{fmt(h.upi)}</td>
+                  <td className={`text-right font-mono ${Math.abs(h.diff) < 0.01 ? "text-bottle" : "text-red"}`}>
+                    {fmt(h.diff)}
+                  </td>
+                  <td className="text-right">
+                    <button
+                      onClick={() => deleteSaleDay(h)}
+                      disabled={deletingDayId === h.id}
+                      title="Delete this entire day's sale"
+                      className="text-xs font-semibold px-2 py-1 rounded-md border border-red/40 text-red hover:bg-red/10"
+                    >
+                      {deletingDayId === h.id ? "…" : "Delete"}
+                    </button>
                   </td>
                 </tr>
-              ) : (
-                history.map((h) => (
-                  <tr key={h.id}>
-                    <td>{h.sale_date}</td>
-                    <td className="text-right font-mono">{fmt(h.sale_value)}</td>
-                    <td className="text-right font-mono">{fmt(h.cash)}</td>
-                    <td className="text-right font-mono">{fmt(h.upi)}</td>
-                    <td className={`text-right font-mono ${Math.abs(h.diff) < 0.01 ? "text-bottle" : "text-red"}`}>
-                      {fmt(h.diff)}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+              ))
+            )}
+          </tbody>
+        </table></div>
       </div>
     </div>
   );
