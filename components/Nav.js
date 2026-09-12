@@ -6,12 +6,14 @@ import { supabase } from "@/lib/supabaseClient";
 
 const TABS = [
   { href: "/", label: "Dashboard" },
+  { href: "/overview", label: "Overview" },
   { href: "/dealers", label: "Dealers" },
   { href: "/purchase", label: "Purchase" },
   { href: "/inventory", label: "Inventory" },
   { href: "/sales", label: "Sales" },
   { href: "/expenses", label: "Expenses" },
   { href: "/employees", label: "Employees" },
+  { href: "/reports", label: "Reports" },
 ];
 
 export default function Nav() {
