@@ -1,11 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { fmt } from "@/lib/helpers";
+import { fmt, todayStr, monthRange } from "@/lib/helpers";
+
+function currentMonthStr() {
+  return todayStr().slice(0, 7); // "YYYY-MM"
+}
 
 export default function EmployeesPage() {
-  const [ledger, setLedger] = useState([]);
+  const [employees, setEmployees] = useState([]); // {id, name, monthly_salary}
+  const [salaryExpenses, setSalaryExpenses] = useState([]); // {employee_id, expense_date, amount}
+  const [selectedMonth, setSelectedMonth] = useState(currentMonthStr());
+
   const [name, setName] = useState("");
   const [salary, setSalary] = useState("");
   const [saving, setSaving] = useState(false);
@@ -14,20 +21,47 @@ export default function EmployeesPage() {
 
   const [editingId, setEditingId] = useState(null);
   const [editSalary, setEditSalary] = useState("");
-  const [savingEdit, setSavingEdit] = useState(false);
 
   useEffect(() => {
     load();
   }, []);
 
   async function load() {
-    const { data, error } = await supabase
-      .from("employee_ledger")
-      .select("*")
-      .order("name");
-    if (error) setError(error.message);
-    setLedger(data || []);
+    setError("");
+    const [{ data: emp, error: e1 }, { data: exp, error: e2 }] = await Promise.all([
+      supabase.from("employees").select("id, name, monthly_salary").order("name"),
+      supabase
+        .from("expenses")
+        .select("employee_id, expense_date, amount")
+        .eq("type", "Salary"),
+    ]);
+    if (e1) setError(e1.message);
+    if (e2) setError(e2.message);
+    setEmployees(emp || []);
+    setSalaryExpenses(exp || []);
   }
+
+  // Derived ledger for whichever month is selected — recomputed locally,
+  // no extra network round-trip needed when the month changes.
+  const ledger = useMemo(() => {
+    const { start, end } = monthRange(`${selectedMonth}-01`);
+    return employees.map((emp) => {
+      const paidThisMonth = salaryExpenses
+        .filter((x) => x.employee_id === emp.id && x.expense_date >= start && x.expense_date <= end)
+        .reduce((s, x) => s + Number(x.amount), 0);
+      const totalPaidAllTime = salaryExpenses
+        .filter((x) => x.employee_id === emp.id)
+        .reduce((s, x) => s + Number(x.amount), 0);
+      return {
+        employee_id: emp.id,
+        name: emp.name,
+        monthly_salary: Number(emp.monthly_salary),
+        paid_this_month: paidThisMonth,
+        outstanding: Number(emp.monthly_salary) - paidThisMonth,
+        total_paid_all_time: totalPaidAllTime,
+      };
+    });
+  }, [employees, salaryExpenses, selectedMonth]);
 
   async function addEmployee(e) {
     e.preventDefault();
@@ -58,19 +92,20 @@ export default function EmployeesPage() {
     setEditSalary("");
   }
 
-  async function saveEdit(row) {
-    setSavingEdit(true);
+  async function commitEdit(row) {
+    if (editingId !== row.employee_id) return;
+    const nextVal = Number(editSalary) || 0;
+    setEditingId(null);
+    if (nextVal === row.monthly_salary) return;
     setError("");
     const { error } = await supabase
       .from("employees")
-      .update({ monthly_salary: Number(editSalary) || 0 })
+      .update({ monthly_salary: nextVal })
       .eq("id", row.employee_id);
-    setSavingEdit(false);
     if (error) {
       setError(error.message);
       return;
     }
-    cancelEdit();
     load();
   }
 
@@ -88,13 +123,15 @@ export default function EmployeesPage() {
     load();
   }
 
+  const isCurrentMonth = selectedMonth === currentMonthStr();
+
   return (
     <div>
       <div className="card">
         <h2 className="font-display font-semibold text-lg mb-1">Add employee</h2>
         <p className="text-xs text-stone-500 mb-3">
           Set their fixed monthly salary here. Log actual payments to them from the Expenses
-          page using type "Salary" — those payments feed the "Paid this month" column below.
+          page using type "Salary" — those payments feed the "Paid" column below.
         </p>
         <form onSubmit={addEmployee} className="flex flex-wrap gap-3 items-end">
           <div className="flex-1 min-w-[160px]">
@@ -120,10 +157,24 @@ export default function EmployeesPage() {
       </div>
 
       <div className="card">
-        <h2 className="font-display font-semibold text-lg mb-1">Salary ledger — this month</h2>
+        <div className="flex justify-between items-center flex-wrap gap-3 mb-1">
+          <h2 className="font-display font-semibold text-lg">Salary ledger</h2>
+          <div className="min-w-[160px]">
+            <label className="field-label">Month</label>
+            <input
+              type="month"
+              className="input"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+            />
+          </div>
+        </div>
         <p className="text-xs text-stone-500 mb-3">
-          Outstanding = monthly salary − payments logged as "Salary" expenses this calendar
-          month. Resets automatically at the start of each month.
+          Outstanding = monthly salary − "Salary" expenses logged in the selected month. Click a
+          salary amount to edit it inline —{" "}
+          {isCurrentMonth
+            ? "this sets the rate used going forward."
+            : "note: this changes the current rate everywhere, not just for the month you're viewing, since past rates aren't stored separately."}
         </p>
         <div className="overflow-x-auto">
           <table className="data">
@@ -160,9 +211,24 @@ export default function EmployeesPage() {
                             className="input font-mono text-right max-w-[120px] inline-block"
                             value={editSalary}
                             onChange={(e) => setEditSalary(e.target.value)}
+                            onBlur={() => commitEdit(r)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.currentTarget.blur();
+                              } else if (e.key === "Escape") {
+                                cancelEdit();
+                                e.currentTarget.blur();
+                              }
+                            }}
                           />
                         ) : (
-                          fmt(r.monthly_salary)
+                          <button
+                            onClick={() => startEdit(r)}
+                            title="Click to edit"
+                            className="hover:bg-amber/10 rounded px-1 -mx-1 transition-colors"
+                          >
+                            {fmt(r.monthly_salary)}
+                          </button>
                         )}
                       </td>
                       <td className="text-right font-mono">{fmt(r.paid_this_month)}</td>
@@ -175,48 +241,22 @@ export default function EmployeesPage() {
                         {fmt(r.outstanding)}
                       </td>
                       <td className="text-right whitespace-nowrap">
-                        {isEditing ? (
-                          <div className="flex gap-2 justify-end">
-                            <button
-                              onClick={() => saveEdit(r)}
-                              disabled={savingEdit}
-                              className="text-xs font-semibold px-2 py-1 rounded-md border border-bottle/40 text-bottle hover:bg-bottle/10"
-                            >
-                              {savingEdit ? "…" : "Save"}
-                            </button>
-                            <button
-                              onClick={cancelEdit}
-                              className="text-xs font-semibold px-2 py-1 rounded-md border border-line text-stone-500 hover:bg-stone-100"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex gap-2 justify-end">
-                            <button
-                              onClick={() => startEdit(r)}
-                              className="text-xs font-semibold px-2 py-1 rounded-md border border-line text-stone-600 hover:bg-stone-100"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => deleteEmployee(r)}
-                              disabled={!canDelete || deletingId === r.employee_id}
-                              title={
-                                canDelete
-                                  ? "Delete employee"
-                                  : "Only employees with no salary payment history can be deleted"
-                              }
-                              className={`text-xs font-semibold px-2 py-1 rounded-md border ${
-                                canDelete
-                                  ? "border-red/40 text-red hover:bg-red/10"
-                                  : "border-line text-stone-300 cursor-not-allowed"
-                              }`}
-                            >
-                              {deletingId === r.employee_id ? "…" : "Delete"}
-                            </button>
-                          </div>
-                        )}
+                        <button
+                          onClick={() => deleteEmployee(r)}
+                          disabled={!canDelete || deletingId === r.employee_id}
+                          title={
+                            canDelete
+                              ? "Delete employee"
+                              : "Only employees with no salary payment history can be deleted"
+                          }
+                          className={`text-xs font-semibold px-2 py-1 rounded-md border ${
+                            canDelete
+                              ? "border-red/40 text-red hover:bg-red/10"
+                              : "border-line text-stone-300 cursor-not-allowed"
+                          }`}
+                        >
+                          {deletingId === r.employee_id ? "…" : "Delete"}
+                        </button>
                       </td>
                     </tr>
                   );
