@@ -4,9 +4,8 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { fmt, todayStr } from "@/lib/helpers";
 
-const TYPES = ["Salary", "Rent", "Dealer Payment", "Sadar", "Sadar Daily"];
-
 export default function ExpensesPage() {
+  const [types, setTypes] = useState([]); // {name, requires_employee, requires_dealer, is_system}
   const [employees, setEmployees] = useState([]);
   const [dealers, setDealers] = useState([]);
   const [log, setLog] = useState([]);
@@ -16,18 +15,25 @@ export default function ExpensesPage() {
 
   const [form, setForm] = useState({
     date: todayStr(),
-    type: "Salary",
+    type: "",
     subId: "",
     amount: "",
     note: "",
   });
+
+  const [showManageTypes, setShowManageTypes] = useState(false);
+  const [newType, setNewType] = useState({ name: "", requires: "none" }); // requires: none | employee | dealer
+  const [savingType, setSavingType] = useState(false);
+  const [typeError, setTypeError] = useState("");
+  const [deletingType, setDeletingType] = useState(null);
 
   useEffect(() => {
     load();
   }, []);
 
   async function load() {
-    const [{ data: emp }, { data: deal }, { data: exp }] = await Promise.all([
+    const [{ data: t }, { data: emp }, { data: deal }, { data: exp }] = await Promise.all([
+      supabase.from("expense_types").select("*").order("name"),
       supabase.from("employees").select("*").order("name"),
       supabase.from("dealers").select("*").order("name"),
       supabase
@@ -36,17 +42,27 @@ export default function ExpensesPage() {
         .order("expense_date", { ascending: false })
         .limit(100),
     ]);
+    setTypes(t || []);
     setEmployees(emp || []);
     setDealers(deal || []);
     setLog(exp || []);
-    setForm((f) => ({ ...f, subId: f.subId || emp?.[0]?.id || "" }));
+    setForm((f) => ({
+      ...f,
+      type: f.type || t?.[0]?.name || "",
+      subId: f.subId || emp?.[0]?.id || "",
+    }));
   }
 
-  function onTypeChange(type) {
+  function currentType() {
+    return types.find((t) => t.name === form.type);
+  }
+
+  function onTypeChange(typeName) {
+    const t = types.find((x) => x.name === typeName);
     let subId = "";
-    if (type === "Salary") subId = employees[0]?.id || "";
-    if (type === "Dealer Payment") subId = dealers[0]?.id || "";
-    setForm({ ...form, type, subId });
+    if (t?.requires_employee) subId = employees[0]?.id || "";
+    if (t?.requires_dealer) subId = dealers[0]?.id || "";
+    setForm({ ...form, type: typeName, subId });
   }
 
   async function submit(e) {
@@ -54,11 +70,12 @@ export default function ExpensesPage() {
     setError("");
     const amount = Number(form.amount);
     if (!amount) return;
-    if (form.type === "Salary" && !form.subId) {
+    const t = currentType();
+    if (t?.requires_employee && !form.subId) {
       setError("Choose an employee.");
       return;
     }
-    if (form.type === "Dealer Payment" && !form.subId) {
+    if (t?.requires_dealer && !form.subId) {
       setError("Choose a dealer.");
       return;
     }
@@ -68,8 +85,8 @@ export default function ExpensesPage() {
       type: form.type,
       amount,
       note: form.note.trim() || null,
-      employee_id: form.type === "Salary" ? form.subId : null,
-      dealer_id: form.type === "Dealer Payment" ? form.subId : null,
+      employee_id: t?.requires_employee ? form.subId : null,
+      dealer_id: t?.requires_dealer ? form.subId : null,
     };
     const { error } = await supabase.from("expenses").insert(payload);
     setSaving(false);
@@ -94,10 +111,116 @@ export default function ExpensesPage() {
     load();
   }
 
+  async function addType(e) {
+    e.preventDefault();
+    if (!newType.name.trim()) return;
+    setSavingType(true);
+    setTypeError("");
+    const { error } = await supabase.from("expense_types").insert({
+      name: newType.name.trim(),
+      requires_employee: newType.requires === "employee",
+      requires_dealer: newType.requires === "dealer",
+      is_system: false,
+    });
+    setSavingType(false);
+    if (error) {
+      setTypeError(error.message);
+      return;
+    }
+    setNewType({ name: "", requires: "none" });
+    load();
+  }
+
+  async function deleteType(t) {
+    if (t.is_system) return;
+    if (!confirm(`Delete expense type "${t.name}"? Only possible if no expenses use it.`)) return;
+    setDeletingType(t.name);
+    setTypeError("");
+    const { error } = await supabase.from("expense_types").delete().eq("name", t.name);
+    setDeletingType(null);
+    if (error) {
+      setTypeError(
+        error.message.includes("foreign key")
+          ? `"${t.name}" is already used by existing expenses and can't be deleted.`
+          : error.message
+      );
+      return;
+    }
+    load();
+  }
+
+  const activeType = currentType();
+
   return (
     <div>
       <div className="card">
-        <h2 className="font-display font-semibold text-lg mb-3">New expense</h2>
+        <div className="flex justify-between items-center mb-3">
+          <h2 className="font-display font-semibold text-lg">New expense</h2>
+          <button
+            type="button"
+            className="btn-ghost"
+            onClick={() => setShowManageTypes((v) => !v)}
+          >
+            {showManageTypes ? "Hide" : "Manage"} expense types
+          </button>
+        </div>
+
+        {showManageTypes && (
+          <div className="mb-4 p-3 rounded-md border border-line bg-paper2">
+            <form onSubmit={addType} className="flex flex-wrap gap-3 items-end mb-3">
+              <div className="flex-1 min-w-[160px]">
+                <label className="field-label">New type name</label>
+                <input
+                  className="input"
+                  placeholder="e.g. Electricity"
+                  value={newType.name}
+                  onChange={(e) => setNewType({ ...newType, name: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="min-w-[160px]">
+                <label className="field-label">Requires selecting</label>
+                <select
+                  className="input"
+                  value={newType.requires}
+                  onChange={(e) => setNewType({ ...newType, requires: e.target.value })}
+                >
+                  <option value="none">Nothing extra</option>
+                  <option value="employee">An employee</option>
+                  <option value="dealer">A dealer</option>
+                </select>
+              </div>
+              <button className="btn-primary" disabled={savingType}>
+                {savingType ? "Adding…" : "Add type"}
+              </button>
+            </form>
+            {typeError && <div className="text-xs text-red mb-2">{typeError}</div>}
+            <div className="flex flex-wrap gap-2">
+              {types.map((t) => (
+                <span
+                  key={t.name}
+                  className="tag bg-stone-200 text-stone-700 inline-flex items-center gap-1.5"
+                >
+                  {t.name}
+                  {t.requires_employee && <span className="opacity-60">· employee</span>}
+                  {t.requires_dealer && <span className="opacity-60">· dealer</span>}
+                  {!t.is_system && (
+                    <button
+                      type="button"
+                      onClick={() => deleteType(t)}
+                      disabled={deletingType === t.name}
+                      title="Delete this type"
+                      className="ml-1 text-red hover:text-red font-bold leading-none"
+                    >
+                      {deletingType === t.name ? "…" : "×"}
+                    </button>
+                  )}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
         <form onSubmit={submit}>
           <div className="flex flex-wrap gap-3 mb-3">
             <div className="min-w-[140px]">
@@ -113,12 +236,14 @@ export default function ExpensesPage() {
             <div className="min-w-[160px]">
               <label className="field-label">Expense type</label>
               <select className="input" value={form.type} onChange={(e) => onTypeChange(e.target.value)}>
-                {TYPES.map((t) => (
-                  <option key={t}>{t}</option>
+                {types.map((t) => (
+                  <option key={t.name} value={t.name}>
+                    {t.name}
+                  </option>
                 ))}
               </select>
             </div>
-            {form.type === "Salary" && (
+            {activeType?.requires_employee && (
               <div className="min-w-[160px]">
                 <label className="field-label">Employee</label>
                 <select
@@ -134,7 +259,7 @@ export default function ExpensesPage() {
                 </select>
               </div>
             )}
-            {form.type === "Dealer Payment" && (
+            {activeType?.requires_dealer && (
               <div className="min-w-[160px]">
                 <label className="field-label">Dealer</label>
                 <select
