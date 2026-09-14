@@ -11,6 +11,7 @@ export default function PurchasePage() {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+  const [exporting, setExporting] = useState(false);
 
   const [form, setForm] = useState({
     date: todayStr(),
@@ -97,6 +98,35 @@ export default function PurchasePage() {
       return;
     }
     load();
+  }
+
+  async function downloadCsv() {
+    setExporting(true);
+    setError("");
+    const { data, error } = await supabase
+      .from("purchases")
+      .select("*, dealers(name), inventory_items(name, size, category)")
+      .order("purchase_date", { ascending: false });
+    setExporting(false);
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    if (!data || data.length === 0) {
+      alert("No purchases to export.");
+      return;
+    }
+    let csv = "Date,Bill No,Dealer,Item,Qty,Rate,Value\n";
+    data.forEach((p) => {
+      const item = String(itemLabel(p.inventory_items)).replace(/"/g, '""');
+      const dealer = String(p.dealers?.name || "").replace(/"/g, '""');
+      csv += `${p.purchase_date},${p.bill_no || ""},"${dealer}","${item}",${p.qty},${p.rate},${p.value}\n`;
+    });
+    const blob = new Blob([csv], { type: "text/csv" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `purchase-history-${todayStr()}.csv`;
+    a.click();
   }
 
   const previewValue = Number(form.qty || 0) * Number(form.rate || 0);
@@ -210,7 +240,12 @@ export default function PurchasePage() {
       </div>
 
       <div className="card">
-        <h2 className="font-display font-semibold text-lg mb-3">Purchase history</h2>
+        <div className="flex justify-between items-center mb-3">
+          <h2 className="font-display font-semibold text-lg">Purchase history</h2>
+          <button className="btn-ghost" onClick={downloadCsv} disabled={exporting}>
+            {exporting ? "Preparing…" : "Download CSV"}
+          </button>
+        </div>
         <div className="overflow-x-auto">
         <table className="data">
           <thead>
