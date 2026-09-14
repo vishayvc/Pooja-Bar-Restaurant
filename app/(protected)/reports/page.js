@@ -56,7 +56,7 @@ async function buildDealerLedger(dealer, fy) {
 
   const openingPurchased = (priorPurchases || []).reduce((s, p) => s + Number(p.value), 0);
   const openingPaid = (priorPayments || []).reduce((s, p) => s + Number(p.amount), 0);
-  const opening = openingPurchased - openingPaid;
+  const opening = Number(dealer.opening_balance || 0) + openingPurchased - openingPaid;
 
   const txns = [
     ...(purchases || []).map((p) => ({
