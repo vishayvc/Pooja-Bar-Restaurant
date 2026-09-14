@@ -4,12 +4,25 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { fmt, todayStr, itemLabel } from "@/lib/helpers";
 
+function Kpi({ label, value, sub }) {
+  return (
+    <div className="kpi">
+      <div className="text-[11px] uppercase tracking-wide text-stone-500 font-semibold truncate">
+        {label}
+      </div>
+      <div className="font-display font-semibold text-xl mt-1 text-ink">{value}</div>
+      {sub && <div className="text-[11px] text-stone-400 mt-0.5">{sub}</div>}
+    </div>
+  );
+}
+
 export default function SalesPage() {
   const [date, setDate] = useState(todayStr());
   const [items, setItems] = useState([]);
   const [saleDay, setSaleDay] = useState(null);
   const [lines, setLines] = useState([]);
   const [history, setHistory] = useState([]);
+  const [snapshot, setSnapshot] = useState({ openingValue: 0, closingValue: 0, rows: [] });
 
   const [lineItemId, setLineItemId] = useState("");
   const [lineQty, setLineQty] = useState("");
@@ -45,6 +58,71 @@ export default function SalesPage() {
     setHistory(data || []);
   }
 
+  // Stock isn't stored per-date, only as a running total. But since every
+  // change to it happens through a purchase or a sale, we can reconstruct
+  // what it was at the start (and end) of any date by working backward
+  // from the current total: undo everything that happened after that date.
+  async function loadStockSnapshot(d) {
+    const [{ data: allItems }, { data: purchasesFrom }, { data: daysFrom }] = await Promise.all([
+      supabase.from("inventory_items").select("id, category, name, size, stock, purchase_rate"),
+      supabase.from("purchases").select("item_id, qty, purchase_date").gte("purchase_date", d),
+      supabase.from("sale_days").select("id, sale_date").gte("sale_date", d),
+    ]);
+
+    const dayIds = (daysFrom || []).map((x) => x.id);
+    const dateByDayId = Object.fromEntries((daysFrom || []).map((x) => [x.id, x.sale_date]));
+
+    let salesFrom = [];
+    if (dayIds.length) {
+      const { data } = await supabase
+        .from("sale_lines")
+        .select("item_id, qty, sale_day_id")
+        .in("sale_day_id", dayIds);
+      salesFrom = (data || []).map((s) => ({ ...s, sale_date: dateByDayId[s.sale_day_id] }));
+    }
+
+    const rows = (allItems || [])
+      .map((item) => {
+        const purchAfter = (purchasesFrom || [])
+          .filter((p) => p.item_id === item.id && p.purchase_date > d)
+          .reduce((s, p) => s + Number(p.qty), 0);
+        const purchOn = (purchasesFrom || [])
+          .filter((p) => p.item_id === item.id && p.purchase_date === d)
+          .reduce((s, p) => s + Number(p.qty), 0);
+        const saleAfter = salesFrom
+          .filter((s) => s.item_id === item.id && s.sale_date > d)
+          .reduce((s, x) => s + Number(x.qty), 0);
+        const saleOn = salesFrom
+          .filter((s) => s.item_id === item.id && s.sale_date === d)
+          .reduce((s, x) => s + Number(x.qty), 0);
+
+        const closing = Number(item.stock) - purchAfter + saleAfter;
+        const opening = closing - purchOn + saleOn;
+
+        return {
+          item,
+          opening,
+          purchased: purchOn,
+          sold: saleOn,
+          closing,
+        };
+      })
+      .filter((r) => r.purchased !== 0 || r.sold !== 0); // only items that moved that day
+
+    const openingValue = (allItems || []).reduce((s, item) => {
+      const row = rows.find((r) => r.item.id === item.id);
+      const opening = row ? row.opening : Number(item.stock); // untouched items: opening = current = closing
+      return s + opening * Number(item.purchase_rate);
+    }, 0);
+    const closingValue = (allItems || []).reduce((s, item) => {
+      const row = rows.find((r) => r.item.id === item.id);
+      const closing = row ? row.closing : Number(item.stock);
+      return s + closing * Number(item.purchase_rate);
+    }, 0);
+
+    setSnapshot({ openingValue, closingValue, rows });
+  }
+
   async function loadDay(d) {
     setError("");
     const { data: dayRow } = await supabase.from("sale_days").select("*").eq("sale_date", d).maybeSingle();
@@ -62,6 +140,8 @@ export default function SalesPage() {
     } else {
       setLines([]);
     }
+
+    await loadStockSnapshot(d);
   }
 
   async function ensureSaleDay() {
@@ -110,8 +190,6 @@ export default function SalesPage() {
     await Promise.all([loadDay(date), loadItems(), loadHistory()]);
   }
 
-  // Cash and UPI auto-complete each other against the running line total —
-  // type one, the other fills in with whatever's left to reconcile.
   function currentLineTotal() {
     return lines.reduce((s, l) => s + Number(l.value), 0);
   }
@@ -177,6 +255,7 @@ export default function SalesPage() {
       csv += `${itemLabel(l.inventory_items)},${l.qty},${l.rate},${l.value}\n`;
     });
     csv += `\nCash,${cash}\nUPI,${upi}\nTotal Sale Value,${lineTotal}\n`;
+    csv += `Opening inventory value,${snapshot.openingValue}\nClosing inventory value,${snapshot.closingValue}\n`;
     const blob = new Blob([csv], { type: "text/csv" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -191,6 +270,7 @@ export default function SalesPage() {
 
   const selectedItem = items.find((i) => i.id === lineItemId);
   const linePreview = selectedItem ? Number(lineQty || 0) * selectedItem.selling_rate : 0;
+  const isToday = date === todayStr();
 
   return (
     <div>
@@ -202,10 +282,23 @@ export default function SalesPage() {
             <input type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
         </div>
-        <p className="text-xs text-stone-500 mb-3">
+        <p className="text-xs text-stone-500 mb-4">
           Each line saves — and updates stock — immediately. Cash/UPI collection is saved
           separately below.
         </p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+          <Kpi
+            label="Opening inventory value"
+            value={fmt(snapshot.openingValue)}
+            sub={isToday ? "start of today" : `start of ${date}`}
+          />
+          <Kpi
+            label="Closing inventory value"
+            value={fmt(snapshot.closingValue)}
+            sub={isToday ? "as of now" : `end of ${date}`}
+          />
+        </div>
 
         <form onSubmit={addLine} className="flex flex-wrap gap-3 items-end mb-4">
           <div className="flex-1 min-w-[200px]">
@@ -330,38 +423,39 @@ export default function SalesPage() {
       </div>
 
       <div className="card">
-        <h2 className="font-display font-semibold text-lg mb-3">Opening / closing stock</h2>
-        <p className="text-xs text-stone-500 mb-3">For items sold on the selected date.</p>
+        <h2 className="font-display font-semibold text-lg mb-1">Opening / closing stock by item</h2>
+        <p className="text-xs text-stone-500 mb-3">
+          Items with any purchase or sale on the selected date. Values use each item's current
+          purchase rate, not necessarily the historical rate on that date.
+        </p>
         <div className="overflow-x-auto">
         <table className="data">
           <thead>
             <tr>
               <th>Item</th>
               <th className="text-right">Opening</th>
+              <th className="text-right">Purchased</th>
               <th className="text-right">Sold</th>
               <th className="text-right">Closing</th>
             </tr>
           </thead>
           <tbody>
-            {lines.length === 0 ? (
+            {snapshot.rows.length === 0 ? (
               <tr>
-                <td colSpan={4} className="text-stone-400 italic text-sm py-3">
-                  Add sale lines to see stock movement.
+                <td colSpan={5} className="text-stone-400 italic text-sm py-3">
+                  No stock movement on this date.
                 </td>
               </tr>
             ) : (
-              lines.map((l) => {
-                const closing = l.inventory_items?.stock ?? 0;
-                const opening = closing + l.qty;
-                return (
-                  <tr key={l.id}>
-                    <td>{itemLabel(l.inventory_items)}</td>
-                    <td className="text-right font-mono">{opening}</td>
-                    <td className="text-right font-mono">{l.qty}</td>
-                    <td className="text-right font-mono">{closing}</td>
-                  </tr>
-                );
-              })
+              snapshot.rows.map((r) => (
+                <tr key={r.item.id}>
+                  <td>{itemLabel(r.item)}</td>
+                  <td className="text-right font-mono">{r.opening}</td>
+                  <td className="text-right font-mono">{r.purchased || ""}</td>
+                  <td className="text-right font-mono">{r.sold || ""}</td>
+                  <td className="text-right font-mono">{r.closing}</td>
+                </tr>
+              ))
             )}
           </tbody>
         </table></div>
